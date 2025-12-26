@@ -1,0 +1,9 @@
+{
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+  "editor.formatOnSave": true,
+  "editor.rulers": [
+    100
+  ],
+  "markdown.preview.breaks": true
+}
