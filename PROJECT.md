@@ -19,7 +19,7 @@
 - Devices (e.g., iPad / Android / Windows):
 
 ## Non-goals
-- (What you explicitly won’t build yet)
+- (What you explicitly won't build yet)
 
 ## Milestones
 1) MVP:

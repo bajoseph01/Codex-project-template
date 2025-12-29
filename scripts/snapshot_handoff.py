@@ -22,7 +22,7 @@ def main() -> None:
     if HANDOFF.exists():
         lines = HANDOFF.read_text(encoding="utf-8").splitlines()
         if lines and lines[0].startswith("# HANDOFF"):
-            lines[0] = f"# HANDOFF ({now.strftime('%Y-%m-%d')} — {TZ})"
+            lines[0] = f"# HANDOFF ({now.strftime('%Y-%m-%d')} -- {TZ})"
             HANDOFF.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     print(f"Wrote snapshot: {snapshot}")

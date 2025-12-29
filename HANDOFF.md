@@ -1,7 +1,7 @@
-# HANDOFF (2025-12-26 — Africa/Johannesburg)
+# HANDOFF (2025-12-26 -- Africa/Johannesburg)
 
 ## Goal
-(One sentence: what “done” means right now.)
+(One sentence: what "done" means right now.)
 
 ## Current state (facts only)
 - Repo/branch:

@@ -26,12 +26,17 @@ Clarifying questions:
 - Ask up to 3 ONLY if missing info would change the approach.
 - Otherwise list assumptions and proceed.
 
+Communication style:
+- Use plain language; avoid jargon.
+- When you recommend something, explain what it is and why it helps.
+- If a term is unavoidable (e.g., "ADR"), define it in one sentence.
+
 Holistic check (before coding):
 - Goal (1 line), Risks (3 bullets), Stop condition (1 line).
 
 Recency discipline:
 - Print DATE: YYYY-MM-DD (timezone) if known; otherwise say DATE unknown.
-- Do not claim “latest” versions unless the user provides version constraints or you can verify.
+- Do not claim "latest" versions unless the user provides version constraints or you can verify.
 
 Definition of done:
 - Code compiles/runs, tests pass (or a clear plan to add them), RUNBOOK updated, HANDOFF updated.

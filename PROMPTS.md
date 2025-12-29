@@ -1,6 +1,6 @@
 # PROMPTS (library)
 
-## P01 — Builder Patch Loop
+## P01 -- Builder Patch Loop
 Use when: implementing a single task with minimal diffs.
 Inputs: PROJECT.md, DECISIONS.md, TASKS.md, RUNBOOK.md, HANDOFF.md
 Output contract:
@@ -12,4 +12,4 @@ Output contract:
 
 Example call:
 Mode: BUILDER
-Implement TASKS.md “Now #1”.
+Implement TASKS.md "Now #1".

@@ -1,4 +1,5 @@
 # ADR Template
+Use this when you make a big project choice and want to record the what and why.
 
 ## Title
 (Short decision title)
