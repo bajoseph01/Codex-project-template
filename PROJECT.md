@@ -1,22 +1,22 @@
 # PROJECT
 
 ## Vision
-(One sentence: what are you building?)
+Build a simple 3D infinite runner in the browser to learn how glTF models and Three.js can create elegant, smooth 3D web experiences.
 
 ## Success criteria
-- [ ] (Measurable outcome #1)
-- [ ] (Measurable outcome #2)
-- [ ] (Measurable outcome #3)
+- [ ] App runs locally with `npm run dev`
+- [ ] Chicken player can switch lanes and jump smoothly
+- [ ] Cat obstacles recycle (pooling) and collisions trigger "death"
 
 ## Users
-- Primary user:
-- Secondary user:
+- Primary user: me (learning + experimenting)
+- Secondary user: anyone who wants to try the demo
 
 ## Constraints
-- Tech:
-- Time:
-- Budget:
-- Devices (e.g., iPad / Android / Windows):
+- Tech: Vite + React + TypeScript + Three.js (core); delta-time updates; SRGB + ACES; assets from `/public/models`
+- Time: learn by building small milestones
+- Budget: free
+- Devices: Windows (dev), modern browsers
 
 ## Non-goals
 - (What you explicitly won't build yet)
