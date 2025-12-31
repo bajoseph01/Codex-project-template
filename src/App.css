@@ -2,4 +2,24 @@
   width: 100vw;
   height: 100vh;
   overflow: hidden;
+  position: relative;
+}
+
+.restartButton {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  padding: 12px 22px;
+  font-size: 18px;
+  border: 0;
+  border-radius: 999px;
+  background: #f5a524;
+  color: #0b1020;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.restartButton:hover {
+  filter: brightness(1.05);
 }

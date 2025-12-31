@@ -13,6 +13,7 @@ Have a working learning-focused infinite runner running locally with Chicken as 
 - Models used:
   - Player: `/public/models/Ultimate Monsters/Blob/glTF/Chicken.gltf`
   - Obstacle: `/public/models/Ultimate Monsters/Blob/glTF/Cat.gltf`
+- Backgrounds: parallax layers now use `/public/backgrounds/city_upscaled/*.jpeg` with depth testing enabled so gameplay renders in front.
 - Key constraints: Three.js core; delta-time updates; SRGB + ACES; assets from `/public/models`; 3 lanes (-5/0/5); infinite floor; obstacle pooling; AnimationMixer animations; lil-gui debug (speed, gravity)
 
 ## Decisions (locked)
@@ -20,6 +21,7 @@ Have a working learning-focused infinite runner running locally with Chicken as 
 - D2: Keep general Three.js guidance as project docs (not as a skill).
 - D3: Keep models as `.gltf` (no conversion to `.glb` for now).
 - D4: Use Chicken as player and Cat as obstacles.
+- D5: Use the upscaled city background set (`/public/backgrounds/city_upscaled`).
 
 ## Open questions (need answers)
 1) Which animation clips should map to Run / Jump / Death for the Chicken model (it has different clip names)?

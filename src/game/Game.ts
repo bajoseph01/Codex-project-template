@@ -7,7 +7,7 @@ import { LANES, clampLaneIndex, type LaneIndex } from "./lane";
 import { damp } from "./math";
 import { disposeObject3D } from "./dispose";
 
-type GameState = "loading" | "ready" | "running" | "dead";
+export type GameState = "loading" | "ready" | "running" | "dead";
 
 type GameConfig = {
   gameSpeed: number;
@@ -16,15 +16,32 @@ type GameConfig = {
   cameraYOffset: number;
   cameraLookY: number;
   cameraLead: number;
-  modelScale: number;
+  playerScale: number;
+  obstacleScale: number;
   playerYaw: number;
   obstacleYaw: number;
+  bgHeight: number;
+  bgYOffset: number;
+  bgLead: number;
+  bgSpeed: number;
+  bgRepeatX: number;
 };
 
 type CharacterActions = {
   run?: THREE.AnimationAction;
   jump?: THREE.AnimationAction;
   death?: THREE.AnimationAction;
+  idle?: THREE.AnimationAction;
+};
+
+type ParallaxLayer = {
+  mesh: THREE.Mesh;
+  texture: THREE.Texture;
+  speed: number;
+};
+
+type GameOptions = {
+  onStateChange?: (state: GameState) => void;
 };
 
 export class Game {
@@ -33,6 +50,7 @@ export class Game {
   private readonly scene = new THREE.Scene();
   private readonly camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
   private readonly clock = new THREE.Clock();
+  private readonly onStateChange?: (state: GameState) => void;
 
   private rafId: number | null = null;
   private onResizeBound = this.onResize.bind(this);
@@ -47,12 +65,19 @@ export class Game {
     cameraYOffset: 2,
     cameraLookY: -2,
     cameraLead: 19.3,
-    modelScale: 0.5,
+    playerScale: 1.6,
+    obstacleScale: 0.6,
     playerYaw: 1.438407,
     obstacleYaw: -1.49159,
+    bgHeight: 30,
+    bgYOffset: 6,
+    bgLead: 0,
+    bgSpeed: 1,
+    bgRepeatX: 2,
   };
 
   private readonly gui = new GUI({ title: "Debug" });
+  private readonly bgGui = new GUI({ title: "Background" });
 
   private playerRoot: THREE.Object3D | null = null;
   private playerMixer: THREE.AnimationMixer | null = null;
@@ -74,8 +99,19 @@ export class Game {
   private readonly playerX = -8;
   private cameraFollowX = 0;
 
-  constructor(container: HTMLElement) {
+  private floorGeometry: THREE.PlaneGeometry | null = null;
+  private floorMaterial: THREE.MeshStandardMaterial | null = null;
+  private floorTexture: THREE.Texture | null = null;
+
+  private readonly parallaxGroup = new THREE.Group();
+  private readonly parallaxGeometry = new THREE.PlaneGeometry(1, 1);
+  private readonly parallaxLayers: ParallaxLayer[] = [];
+
+  constructor(container: HTMLElement, options: GameOptions = {}) {
     this.container = container;
+    this.onStateChange = options.onStateChange;
+    this.bgGui.domElement.style.left = "10px";
+    this.bgGui.domElement.style.right = "auto";
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -91,6 +127,7 @@ export class Game {
     this.container.appendChild(this.renderer.domElement);
 
     this.scene.background = new THREE.Color(0x0b1020);
+    this.scene.fog = new THREE.Fog(0x0b1020, 25, 90);
 
     // Side-scroller camera: look along Z so X is horizontal and Y is vertical.
     this.camera.position.set(0, 7, 24);
@@ -98,6 +135,7 @@ export class Game {
 
     this.setupLights();
     this.setupFloor();
+    this.setupParallax();
     this.setupDebug();
 
     window.addEventListener("resize", this.onResizeBound);
@@ -115,12 +153,28 @@ export class Game {
     window.removeEventListener("keydown", this.onKeyDownBound);
 
     this.gui.destroy();
+    this.bgGui.destroy();
 
     for (const seg of this.floorSegments) {
       this.scene.remove(seg);
-      seg.geometry.dispose();
-      (seg.material as THREE.Material).dispose();
     }
+    this.floorSegments.length = 0;
+
+    this.floorGeometry?.dispose();
+    this.floorMaterial?.dispose();
+    this.floorTexture?.dispose();
+    this.floorGeometry = null;
+    this.floorMaterial = null;
+    this.floorTexture = null;
+
+    for (const layer of this.parallaxLayers) {
+      this.parallaxGroup.remove(layer.mesh);
+      layer.mesh.geometry.dispose();
+      (layer.mesh.material as THREE.Material).dispose();
+      layer.texture.dispose();
+    }
+    this.parallaxLayers.length = 0;
+    this.parallaxGeometry.dispose();
 
     for (const obs of this.obstacles) {
       this.scene.remove(obs);
@@ -156,23 +210,108 @@ export class Game {
   }
 
   private setupFloor() {
-    const geom = new THREE.PlaneGeometry(this.floorSegmentLength, 18, 1, 1);
-    geom.rotateX(-Math.PI / 2);
+    this.floorGeometry = new THREE.PlaneGeometry(this.floorSegmentLength, 18, 1, 1);
+    this.floorGeometry.rotateX(-Math.PI / 2);
 
-    const mat = new THREE.MeshStandardMaterial({
-      color: 0x1d2a44,
-      roughness: 1,
+    this.floorTexture = this.createGroundTexture();
+    this.floorTexture.wrapS = THREE.RepeatWrapping;
+    this.floorTexture.wrapT = THREE.RepeatWrapping;
+    this.floorTexture.repeat.set(2, 1);
+    this.floorTexture.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+
+    this.floorMaterial = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      roughness: 0.95,
       metalness: 0,
+      map: this.floorTexture,
     });
 
     const segmentCount = 6;
     for (let i = 0; i < segmentCount; i++) {
-      const seg = new THREE.Mesh(geom, mat);
+      const seg = new THREE.Mesh(this.floorGeometry, this.floorMaterial);
       seg.receiveShadow = true;
       seg.position.set(-20 + i * this.floorSegmentLength, 0, 0);
       this.floorSegments.push(seg);
       this.scene.add(seg);
     }
+  }
+
+  private createGroundTexture(): THREE.Texture {
+    const canvas = document.createElement("canvas");
+    canvas.width = 512;
+    canvas.height = 512;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return new THREE.Texture();
+
+    // Base asphalt tone.
+    ctx.fillStyle = "#2a2f3a";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Subtle noise speckles.
+    for (let i = 0; i < 4000; i++) {
+      const x = Math.random() * canvas.width;
+      const y = Math.random() * canvas.height;
+      const alpha = Math.random() * 0.08;
+      ctx.fillStyle = `rgba(255,255,255,${alpha.toFixed(3)})`;
+      ctx.fillRect(x, y, 1, 1);
+    }
+
+    // A slightly lighter running path stripe.
+    ctx.fillStyle = "rgba(255,255,255,0.08)";
+    ctx.fillRect(0, canvas.height * 0.42, canvas.width, canvas.height * 0.16);
+
+    // Darker edge bands.
+    ctx.fillStyle = "rgba(0,0,0,0.2)";
+    ctx.fillRect(0, 0, canvas.width, canvas.height * 0.12);
+    ctx.fillRect(0, canvas.height * 0.88, canvas.width, canvas.height * 0.12);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    return texture;
+  }
+
+  private setupParallax() {
+    const layerDefs = [
+      { file: "/backgrounds/city_upscaled_transp/1.png", speed: 0.01, z: -80 },
+      { file: "/backgrounds/city_upscaled_transp/2.png", speed: 0.02, z: -70 },
+      { file: "/backgrounds/city_upscaled_transp/3.png", speed: 0.03, z: -65 },
+      { file: "/backgrounds/city_upscaled_transp/4.png", speed: 0.04, z: -60 },
+      { file: "/backgrounds/city_upscaled_transp/5.png", speed: 0.06, z: -55 },
+      { file: "/backgrounds/city_upscaled_transp/6.png", speed: 0.08, z: -50 },
+      { file: "/backgrounds/city_upscaled_transp/7.png", speed: 0.1, z: -45 },
+    ];
+
+    const loader = new THREE.TextureLoader();
+    for (let i = 0; i < layerDefs.length; i++) {
+      const def = layerDefs[i];
+      loader.load(def.file, (texture) => {
+        texture.colorSpace = THREE.SRGBColorSpace;
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.ClampToEdgeWrapping;
+        texture.repeat.set(this.config.bgRepeatX, 1);
+        texture.offset.set(0, 0);
+        texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+        texture.minFilter = THREE.LinearFilter;
+        texture.magFilter = THREE.LinearFilter;
+
+        const material = new THREE.MeshBasicMaterial({
+          map: texture,
+          transparent: !def.opaque,
+          depthWrite: false,
+          depthTest: true,
+        });
+
+        const mesh = new THREE.Mesh(this.parallaxGeometry, material);
+        mesh.position.set(0, 0, def.z);
+        mesh.renderOrder = -100 + i;
+
+        this.parallaxGroup.add(mesh);
+        this.parallaxLayers.push({ mesh, texture, speed: def.speed });
+        this.updateParallaxScale();
+      });
+    }
+
+    this.scene.add(this.parallaxGroup);
   }
 
   private setupDebug() {
@@ -186,8 +325,12 @@ export class Game {
     this.gui.add(this.config, "cameraLookY", -5, 15, 0.1).name("Look Y");
     this.gui.add(this.config, "cameraLead", -10, 20, 0.1).name("Camera Lead");
     this.gui
-      .add(this.config, "modelScale", 0.2, 3, 0.05)
-      .name("Model Scale")
+      .add(this.config, "playerScale", 0.2, 3, 0.05)
+      .name("Player Scale")
+      .onChange(() => this.applyModelScale());
+    this.gui
+      .add(this.config, "obstacleScale", 0.2, 3, 0.05)
+      .name("Obstacle Scale")
       .onChange(() => this.applyModelScale());
     this.gui
       .add(this.config, "playerYaw", -Math.PI, Math.PI, 0.01)
@@ -197,6 +340,24 @@ export class Game {
       .add(this.config, "obstacleYaw", -Math.PI, Math.PI, 0.01)
       .name("Obstacle Yaw")
       .onChange(() => this.applyModelRotation());
+
+    this.bgGui
+      .add(this.config, "bgHeight", 10, 80, 0.1)
+      .name("BG Height")
+      .onChange(() => this.updateParallaxScale());
+    this.bgGui
+      .add(this.config, "bgYOffset", -20, 30, 0.1)
+      .name("BG Y Offset");
+    this.bgGui
+      .add(this.config, "bgLead", -30, 30, 0.1)
+      .name("BG X Offset");
+    this.bgGui
+      .add(this.config, "bgSpeed", 0, 3, 0.05)
+      .name("BG Speed");
+    this.bgGui
+      .add(this.config, "bgRepeatX", 1, 8, 0.1)
+      .name("BG Repeat X")
+      .onChange(() => this.updateParallaxRepeat());
   }
 
   private async load() {
@@ -214,7 +375,7 @@ export class Game {
 
     this.playerMixer = new THREE.AnimationMixer(this.playerRoot);
     this.playerActions = this.buildCharacterActions(playerGltf.animations);
-    this.playAction(this.playerActions.run, { loop: true });
+    if (this.playerActions.idle) this.playAction(this.playerActions.idle, { loop: true });
 
     // Obstacle prototype + pool
     this.obstaclePrototype = this.prepareModel(obstacleGltf.scene, { desiredHeight: 2.6 });
@@ -233,7 +394,7 @@ export class Game {
     this.applyModelScale();
     this.applyModelRotation();
 
-    this.state = "ready";
+    this.setState("ready");
     this.tick();
   }
 
@@ -281,15 +442,21 @@ export class Game {
   }
 
   private applyModelScale() {
-    const scaleRoot = (obj: THREE.Object3D | null) => {
-      if (!obj) return;
-      const baseScale = (obj.userData.baseScale as number | undefined) ?? 1;
-      obj.scale.setScalar(baseScale * this.config.modelScale);
-    };
+    if (this.playerRoot) {
+      const baseScale = (this.playerRoot.userData.baseScale as number | undefined) ?? 1;
+      this.playerRoot.scale.setScalar(baseScale * this.config.playerScale);
+    }
 
-    scaleRoot(this.playerRoot);
-    scaleRoot(this.obstaclePrototype);
-    for (const obs of this.obstacles) scaleRoot(obs);
+    if (this.obstaclePrototype) {
+      const baseScale =
+        (this.obstaclePrototype.userData.baseScale as number | undefined) ?? 1;
+      this.obstaclePrototype.scale.setScalar(baseScale * this.config.obstacleScale);
+    }
+
+    for (const obs of this.obstacles) {
+      const baseScale = (obs.userData.baseScale as number | undefined) ?? 1;
+      obs.scale.setScalar(baseScale * this.config.obstacleScale);
+    }
   }
 
   private applyModelRotation() {
@@ -305,10 +472,13 @@ export class Game {
     const byName = (needle: string) =>
       clips.find((c) => c.name.toLowerCase().includes(needle));
 
+    const idleClip =
+      byName("idle") ?? byName("standing") ?? byName("stand");
     const runClip = byName("run") ?? clips[0];
     const jumpClip = byName("jump") ?? clips[1] ?? clips[0];
     const deathClip = byName("death") ?? clips[2] ?? clips[0];
 
+    if (idleClip) actions.idle = this.playerMixer.clipAction(idleClip);
     actions.run = this.playerMixer.clipAction(runClip);
     actions.jump = this.playerMixer.clipAction(jumpClip);
     actions.death = this.playerMixer.clipAction(deathClip);
@@ -351,6 +521,12 @@ export class Game {
     if (this.state === "loading") return;
 
     this.updateCamera(delta);
+    this.updateParallax(delta, this.state === "running");
+
+    if (this.state === "dead") {
+      if (this.playerMixer) this.playerMixer.update(delta);
+      return;
+    }
 
     if (this.state !== "running") return;
 
@@ -376,6 +552,18 @@ export class Game {
     this.camera.lookAt(this.cameraFollowX, this.config.cameraLookY, 0);
   }
 
+  private updateParallax(delta: number, moving: boolean) {
+    this.parallaxGroup.position.x = this.cameraFollowX + this.config.bgLead;
+    this.parallaxGroup.position.y = this.config.bgYOffset;
+
+    if (!moving) return;
+
+    for (const layer of this.parallaxLayers) {
+      layer.texture.offset.x +=
+        delta * this.config.gameSpeed * this.config.bgSpeed * layer.speed * 0.01;
+    }
+  }
+
   private updatePlayer(delta: number) {
     if (!this.playerRoot) return;
 
@@ -391,6 +579,7 @@ export class Game {
         this.playerY = jumpFloorY;
         this.playerYVel = 0;
         this.grounded = true;
+        if (this.playerActions.jump) this.playerActions.jump.stop();
         this.playAction(this.playerActions.run, { loop: true });
       }
       this.playerRoot.position.y = this.playerY;
@@ -448,7 +637,8 @@ export class Game {
 
   private die() {
     if (this.state !== "running") return;
-    this.state = "dead";
+    this.setState("dead");
+    if (this.playerMixer) this.playerMixer.stopAllAction();
     this.playAction(this.playerActions.death, { loop: false });
   }
 
@@ -470,11 +660,34 @@ export class Game {
     this.camera.top = this.config.viewHeight / 2;
     this.camera.bottom = -this.config.viewHeight / 2;
     this.camera.updateProjectionMatrix();
+
+    this.updateParallaxScale();
+  }
+
+  private updateParallaxScale() {
+    if (this.parallaxLayers.length === 0) return;
+
+    const width = Math.max(1, this.container.clientWidth);
+    const height = Math.max(1, this.container.clientHeight);
+    const aspect = width / height;
+    const viewWidth = this.config.bgHeight * aspect;
+
+    for (const layer of this.parallaxLayers) {
+      layer.mesh.scale.set(viewWidth, this.config.bgHeight, 1);
+    }
+  }
+
+  private updateParallaxRepeat() {
+    for (const layer of this.parallaxLayers) {
+      layer.texture.repeat.set(this.config.bgRepeatX, 1);
+    }
   }
 
   private onKeyDown(e: KeyboardEvent) {
     if (e.code === "Enter" && this.state === "ready") {
-      this.state = "running";
+      if (this.playerMixer) this.playerMixer.stopAllAction();
+      this.playAction(this.playerActions.run, { loop: true });
+      this.setState("running");
       this.clock.getDelta();
       return;
     }
@@ -493,7 +706,44 @@ export class Game {
       if (!this.grounded) return;
       this.grounded = false;
       this.playerYVel = 14;
+      if (this.playerActions.run) this.playerActions.run.stop();
       this.playAction(this.playerActions.jump, { loop: false });
     }
+  }
+
+  restart() {
+    if (!this.playerRoot) return;
+
+    this.currentLane = 1;
+    this.targetLane = 1;
+    this.playerY = 0;
+    this.playerYVel = 0;
+    this.grounded = true;
+    this.playerRoot.position.set(this.playerX, 0, LANES[this.currentLane]);
+    this.cameraFollowX = 0;
+
+    // Reset floor segments to a clean strip.
+    for (let i = 0; i < this.floorSegments.length; i++) {
+      this.floorSegments[i].position.set(-20 + i * this.floorSegmentLength, 0, 0);
+    }
+
+    // Re-seed obstacles in front of the player.
+    for (let i = 0; i < this.obstacles.length; i++) {
+      const lane = (i % 3) as LaneIndex;
+      this.obstacles[i].position.set(18 + i * 16, 0, LANES[lane]);
+    }
+
+    if (this.playerMixer) {
+      this.playerMixer.stopAllAction();
+      this.playAction(this.playerActions.run, { loop: true });
+    }
+
+    this.setState("running");
+    this.clock.getDelta();
+  }
+
+  private setState(next: GameState) {
+    this.state = next;
+    this.onStateChange?.(next);
   }
 }
